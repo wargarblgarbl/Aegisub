@@ -36,10 +36,10 @@
 
 class AssDialogue;
 
-class WVTTSubtitleFormat final : public SubtitleFormat {
+class TTMLSubtitleFormat final : public SubtitleFormat {
 	std::string ConvertTags(const AssDialogue *diag) const;
 public:
-	WVTTSubtitleFormat();
+	TTMLSubtitleFormat();
 	std::vector<std::string> GetReadWildcards() const override;
 	std::vector<std::string> GetWriteWildcards() const override;
 

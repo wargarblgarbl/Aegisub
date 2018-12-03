@@ -27,12 +27,12 @@
 //
 // Aegisub Project http://www.aegisub.org/
 
-/// @file subtitle_format_wvtt.cpp
+/// @file subtitle_format_ttml.cpp
 /// @brief Reading/writing SubRip format subtitles (.xml)
 /// @ingroup subtitle_io
 ///
 
-#include "subtitle_format_wvtt.h"
+#include "subtitle_format_ttml.h"
 
 #include "ass_attachment.h"
 #include "ass_dialogue.h"
@@ -50,7 +50,7 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/regex.hpp>
 
-DEFINE_EXCEPTION(wvttParseError, SubtitleFormatParseError);
+DEFINE_EXCEPTION(ttmlParseError, SubtitleFormatParseError);
 
 namespace {
 enum class TagType {
@@ -119,7 +119,7 @@ struct ToggleTag {
 	}
 };
 
-class wvttTagParser {
+class ttmlTagParser {
 	struct FontAttribs {
 		std::string face;
 		std::string size;
@@ -131,14 +131,14 @@ class wvttTagParser {
 	const boost::regex is_quoted;
 
 public:
-	wvttTagParser()
+	ttmlTagParser()
 	: tag_matcher("^(.*?)<(/?b|/?i|/?u|/?s|/?font)([^>]*)>(.*)$", boost::regex::icase)
 	, attrib_matcher(R"(^[[:space:]]+(face|size|color)=('[^']*'|"[^"]*"|[^[:space:]]+))", boost::regex::icase)
 	, is_quoted(R"(^(['"]).*\1$)")
 	{
 	}
 
-	std::string ToAss(std::string wvtt)
+	std::string ToAss(std::string ttml)
 	{
 		ToggleTag bold('b');
 		ToggleTag italic('i');
@@ -148,13 +148,13 @@ public:
 
 		std::string ass; // result to be built
 
-		while (!wvtt.empty())
+		while (!ttml.empty())
 		{
 			boost::smatch result;
-			if (!regex_match(wvtt, result, tag_matcher))
+			if (!regex_match(ttml, result, tag_matcher))
 			{
 				// no more tags could be matched, end of string
-				ass.append(wvtt);
+				ass.append(ttml);
 				break;
 			}
 
@@ -167,7 +167,7 @@ public:
 			// the text before the tag goes through unchanged
 			ass.append(pre_text);
 			// the text after the tag is the input for next iteration
-			wvtt = post_text;
+			ttml = post_text;
 
 			boost::to_lower(tag_name);
 			switch (type_from_name(tag_name))
@@ -277,23 +277,23 @@ public:
 	}
 };
 
-std::string WritewvttTime(agi::Time const& ts)
+std::string WritettmlTime(agi::Time const& ts)
 {
 	return agi::format("%02d:%02d:%02d,%03d", ts.GetTimeHours(), ts.GetTimeMinutes(), ts.GetTimeSeconds(), ts.GetTimeMiliseconds());
 }
 
 }
 
-wvttSubtitleFormat::wvttSubtitleFormat()
-: SubtitleFormat("WebVTT")
+TTMLSubtitleFormat::TTMLSubtitleFormat()
+: SubtitleFormat("TTML")
 {
 }
 
-std::vector<std::string> wvttSubtitleFormat::GetReadWildcards() const {
-	return {"wvtt"};
+std::vector<std::string> TTMLSubtitleFormat::GetReadWildcards() const {
+	return {"ttml"};
 }
 
-std::vector<std::string> wvttSubtitleFormat::GetWriteWildcards() const {
+std::vector<std::string> TTMLSubtitleFormat::GetWriteWildcards() const {
 	return GetReadWildcards();
 }
 
@@ -305,18 +305,16 @@ enum class ParseState {
 	LAST_WAS_BLANK
 };
 
-void wvttSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
+void TTMLSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
 	using namespace std;
 
 	TextFileReader file(filename, encoding);
 	target->LoadDefault(false, OPT_GET("Subtitle Format/srt/Default Style Catalog")->GetString());
 
-	// See parsing algorithm at <http://devel.aegisub.org/wiki/SubtitleFormats/wvtt>
-
 	// "hh:mm:ss,fff --> hh:mm:ss,fff" (e.g. "00:00:04,070 --> 00:00:10,04")
-	const boost::regex timestamp_regex("^([0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2},[0-9]{1,}) --> ([0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2},[0-9]{1,})");
+	const boost::regex timestamp_regex("begin=\"^([0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2},[0-9]{1,})\" end=\"([0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2},[0-9]{1,})\"");
 
-	wvttTagParser tag_parser;
+	ttmlTagParser tag_parser;
 
 	ParseState state = ParseState::INITIAL;
 	int line_num = 0;
@@ -344,11 +342,11 @@ void wvttSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename
 					break;
 				}
 
-				throw wvttParseError(agi::format("Parsing wvtt: Expected subtitle index at line %d", line_num));
+				throw ttmlParseError(agi::format("Parsing ttml: Expected subtitle index at line %d", line_num));
 
 			case ParseState::TIMESTAMP:
 				if (!regex_search(text_line, timestamp_match, timestamp_regex))
-					throw wvttParseError(agi::format("Parsing wvtt: Expected timestamp pair at line %d", line_num));
+					throw ttmlParseError(agi::format("Parsing ttml: Expected timestamp pair at line %d", line_num));
 
 				found_timestamps = true;
 				break;
@@ -419,38 +417,34 @@ void wvttSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename
 	}
 
 	if (state == ParseState::TIMESTAMP || state == ParseState::FIRST_LINE_OF_BODY)
-		throw wvttParseError("Parsing wvtt: Incomplete file");
+		throw ttmlParseError("Parsing ttml: Incomplete file");
 
 	if (line) // an unfinalized line
 		line->Text = tag_parser.ToAss(text);
 }
-
-void wvttSubtitleFormat::WriteFile(const AssFile *src, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
+void TTMLSubtitleFormat::WriteFile(const AssFile *src, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
 	TextFileWriter file(filename, encoding);
 
-	// Convert to wvtt
+	// Convert to ttml
 	AssFile copy(*src);
 	copy.Sort();
 	StripComments(copy);
 	RecombineOverlaps(copy);
 	MergeIdentical(copy);
-#ifdef _WIN32
-	ConvertNewlines(copy, "\r\n", false);
-#else
-	ConvertNewlines(copy, "\n", false);
-#endif
+	ConvertNewlines(copy, "<br />", false);
 
 	// Write lines
 	int i=0;
 	for (auto const& current : copy.Events) {
-		file.WriteLineToFile(std::to_string(++i));
-		file.WriteLineToFile(WritewvttTime(current.Start) + " --> " + WritewvttTime(current.End));
-		file.WriteLineToFile(ConvertTags(&current));
-		file.WriteLineToFile("");
+	//	file.WriteLineToFile(std::to_string(++i));
+	//	file.WriteLineToFile(WritettmlTime(current.Start) + " --> " + WritettmlTime(current.End));
+	//	file.WriteLineToFile(ConvertTags(&current));
+		file.WriteLineToFile("<p xml:id=\"subtitle" + std::to_string(++i) + "\" begin=\""+ WritettmlTime(current.Start) + "\" end=\"" + WritettmlTime(current.End) + "\">" + ConvertTags(&current) + "</p>" );
+//		file.WriteLineToFile("");
 	}
 }
 
-bool wvttSubtitleFormat::CanSave(const AssFile *file) const {
+bool TTMLSubtitleFormat::CanSave(const AssFile *file) const {
 	if (!file->Attachments.empty())
 		return false;
 
@@ -474,7 +468,7 @@ bool wvttSubtitleFormat::CanSave(const AssFile *file) const {
 	return true;
 }
 
-std::string wvttSubtitleFormat::ConvertTags(const AssDialogue *diag) const {
+std::string TTMLSubtitleFormat::ConvertTags(const AssDialogue *diag) const {
 	struct tag_state { char tag; bool value; };
 	tag_state tag_states[] = {
 		{'b', false},
