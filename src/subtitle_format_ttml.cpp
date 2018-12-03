@@ -8,7 +8,7 @@
 //     this list of conditions and the following disclaimer.
 //   * Redistributions in binary form must reproduce the above copyright notice,
 //     this list of conditions and the following disclaimer in the documentation
-//     and/or other materials provided with the distribution.
+//     and/or othcopy.Style.Styleser materials provided with the distribution.
 //   * Neither the name of the Aegisub Group nor the names of its contributors
 //     may be used to endorse or promote products derived from this software
 //     without specific prior written permission.
@@ -34,6 +34,8 @@
 
 #include "subtitle_format_ttml.h"
 
+#include<iostream>
+
 #include "ass_attachment.h"
 #include "ass_dialogue.h"
 #include "ass_file.h"
@@ -49,6 +51,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/regex.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 DEFINE_EXCEPTION(ttmlParseError, SubtitleFormatParseError);
 
@@ -290,7 +294,7 @@ TTMLSubtitleFormat::TTMLSubtitleFormat()
 }
 
 std::vector<std::string> TTMLSubtitleFormat::GetReadWildcards() const {
-	return {"ttml"};
+	return {"xml"};
 }
 
 std::vector<std::string> TTMLSubtitleFormat::GetWriteWildcards() const {
@@ -305,8 +309,14 @@ enum class ParseState {
 	LAST_WAS_BLANK
 };
 
+/*
 void TTMLSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
 	using namespace std;
+
+
+	using boost::property_tree::ptree;
+	ptree pt;
+    read_xml(filename, pt);
 
 	TextFileReader file(filename, encoding);
 	target->LoadDefault(false, OPT_GET("Subtitle Format/srt/Default Style Catalog")->GetString());
@@ -422,6 +432,7 @@ void TTMLSubtitleFormat::ReadFile(AssFile *target, agi::fs::path const& filename
 	if (line) // an unfinalized line
 		line->Text = tag_parser.ToAss(text);
 }
+*/
 void TTMLSubtitleFormat::WriteFile(const AssFile *src, agi::fs::path const& filename, agi::vfr::Framerate const& fps, std::string const& encoding) const {
 	TextFileWriter file(filename, encoding);
 
@@ -433,15 +444,43 @@ void TTMLSubtitleFormat::WriteFile(const AssFile *src, agi::fs::path const& file
 	MergeIdentical(copy);
 	ConvertNewlines(copy, "<br />", false);
 
-	// Write lines
+//write header
+	file.WriteLineToFile("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
+	file.WriteLineToFile("<tt xmlns=\"http://www.w3.org/ns/ttml\" \
+	xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\" \
+	xmlns:tts=\"http://www.w3.org/ns/ttml#styling\" \
+	xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\" \
+	xmlns:xml=\"http://www.w3.org/XML/1998/namespace\" \
+	ttp:timeBase=\"media\" \
+	ttp:frameRate=\"24\" \
+	xml:lang=\"en\">");
+	file.WriteLineToFile("<head>");
+	file.WriteLineToFile("<metadata>");
+	file.WriteLineToFile("<ttm:title></ttm:title>");
+	file.WriteLineToFile("</metadata>");
+	file.WriteLineToFile("<styling>");
+	file.WriteLineToFile("<style xml:id=\"s1\" tts:textAlign=\"center\" tts:fontFamily=\"Arial\" tts:fontSize=\"100%\"/>");
+	file.WriteLineToFile("</styling>");
+	file.WriteLineToFile("<layout>");
+	file.WriteLineToFile("<region xml:id=\"bottom\" tts:displayAlign=\"after\" tts:extent=\"80% 40%\" tts:origin=\"10% 50%\"/>");
+	file.WriteLineToFile("<region xml:id=\"top\" tts:displayAlign=\"before\" tts:extent=\"80% 40%\" tts:origin=\"10% 10%\"/>");
+	file.WriteLineToFile("</layout></head>");
+	file.WriteLineToFile("<body region=\"bottom\" style=\"s1\">");
+	file.WriteLineToFile("<div>");
+
+
+// Write lines
 	int i=0;
 	for (auto const& current : copy.Events) {
+
 	//	file.WriteLineToFile(std::to_string(++i));
 	//	file.WriteLineToFile(WritettmlTime(current.Start) + " --> " + WritettmlTime(current.End));
 	//	file.WriteLineToFile(ConvertTags(&current));
 		file.WriteLineToFile("<p xml:id=\"subtitle" + std::to_string(++i) + "\" begin=\""+ WritettmlTime(current.Start) + "\" end=\"" + WritettmlTime(current.End) + "\">" + ConvertTags(&current) + "</p>" );
 //		file.WriteLineToFile("");
 	}
+	file.WriteLineToFile("</div></body></tt>");
+
 }
 
 bool TTMLSubtitleFormat::CanSave(const AssFile *file) const {
@@ -467,6 +506,7 @@ bool TTMLSubtitleFormat::CanSave(const AssFile *file) const {
 
 	return true;
 }
+
 
 std::string TTMLSubtitleFormat::ConvertTags(const AssDialogue *diag) const {
 	struct tag_state { char tag; bool value; };
