@@ -12,8 +12,8 @@ jobs:
           name: Print the Current Time
           command: date
 
-        -run: apt-get update
-        -run: apt-get install aegisub autotools 
-        -run: autoreconf
-        -run: ./configure
-        -run: make
+      - run: apt-get update
+      - run: apt-get install aegisub autotools 
+      - run: autoreconf
+      - run: ./configure
+      - run: make
