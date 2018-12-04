@@ -13,7 +13,7 @@ jobs:
           command: date
 
       - run: apt-get update
-      - run: apt-get install aegisub autotools 
+      - run: apt-get install aegisub automake libtool
       - run: autoreconf
       - run: ./configure
       - run: make
